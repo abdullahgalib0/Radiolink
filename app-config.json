@@ -1,0 +1,18 @@
+{
+  "min_version_code": 1,
+  "latest_version_code": 2,
+  "latest_version_name": "2.1.0",
+  "force_update": true,
+  "block_offline_after_notice": true,
+  "play_store_url": "https:\/\/play.google.com\/store\/apps\/details?id=com.radiolink.gngtec",
+  "title_en": "Update Required",
+  "title_bn": "জরুরি আপডেট প্রয়োজন",
+  "message_en": "A newer version of RadioLink GNGTEC is available. Please update from Google Play to continue.",
+  "message_bn": "রেডিওলিঙ্ক অ্যাপের নতুন ভার্সন এসেছে। ব্যবহার চালিয়ে যেতে গুগল প্লে থেকে আপডেট করুন।",
+  "primary_relay_url": "https:\/\/wakitoki-sarver-file.onrender.com\/",
+  "backup_relay_urls": [
+    "https:\/\/radiolink-backup-v2.onrender.com\/",
+    "https:\/\/radiolink-backup-v3.onrender.com\/"
+  ],
+  "updated_at_ms": 1795611962030
+}
