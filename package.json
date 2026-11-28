@@ -1,11 +1,17 @@
 {
-  "name": "radiolink-global-relay",
-  "version": "1.0.0",
+  "name": "radiolink-relay-neon",
+  "version": "2.1.0",
+  "description": "RadioLink Walkie-Talkie WebSocket Relay with Neon PostgreSQL persistence for users, callsigns, reports, and bans",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
     "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

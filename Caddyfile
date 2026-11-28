@@ -1,0 +1,5 @@
+# Replace {$RELAY_DOMAIN} with your free DuckDNS or custom domain (e.g. myradio.duckdns.org)
+# Or run with IP/Cloudflare Tunnel if you prefer not to expose port 443 directly.
+{$RELAY_DOMAIN::80} {
+    reverse_proxy relay:10000
+}

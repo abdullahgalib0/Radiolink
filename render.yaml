@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: radiolink-relay
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_PIN
+        value: "7788"

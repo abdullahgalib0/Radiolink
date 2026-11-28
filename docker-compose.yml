@@ -1,0 +1,29 @@
+services:
+  relay:
+    build: .
+    container_name: radiolink-relay
+    restart: unless-stopped
+    environment:
+      PORT: "10000"
+      DATABASE_URL: "${DATABASE_URL}"
+      ADMIN_PIN: "${ADMIN_PIN:-7788}"
+    ports:
+      - "10000:10000"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: radiolink-caddy
+    restart: unless-stopped
+    depends_on:
+      - relay
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
