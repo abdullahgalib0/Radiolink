@@ -137,8 +137,41 @@ let memoryConfig = {
   callsign_overrides: {},
   neon_db_connected: Boolean(pool),
   system_shutdown: false,
-  shutdown_message_bn: 'জরুরি রক্ষণাবেক্ষণের জন্য রেডিওলিংক সার্ভিস সাময়িকভাবে বন্ধ রাখা হয়েছে।'
+  shutdown_message_bn: 'জরুরি রক্ষণাবেক্ষণের জন্য রেডিওলিংক সার্ভিস সাময়িকভাবে বন্ধ রাখা হয়েছে।',
+  radio_default_ad_url: '',
+  radio_default_ad_text: 'আপনি শুনছেন রেডিওলিংক। বর্তমান অনুষ্ঠান শেষ হয়েছে, পরবর্তী শো শুরু না হওয়া পর্যন্ত সাথেই থাকুন!'
 };
+
+let memoryFmStations = [
+  { id: 1, name: 'Bangladesh Betar (বাংলাদেশ বেতার)', frequency: '100.0 FM', city: 'Dhaka', category: 'News & National', stream_url: 'http://stream.radio.gov.bd:8000/betardhaka', is_active: true, sort_order: 1 },
+  { id: 2, name: 'Radio Today (রেডিও টুডে)', frequency: '89.6 FM', city: 'Dhaka', category: 'Music & News', stream_url: 'https://stream.radiotodaybd.fm/radiotoday', is_active: true, sort_order: 2 },
+  { id: 3, name: 'Radio Foorti (রেডিও ফূর্তি)', frequency: '88.0 FM', city: 'Dhaka', category: 'Hits & Youth', stream_url: 'https://stream.radiofoorti.fm/foorti', is_active: true, sort_order: 3 },
+  { id: 4, name: 'Dhaka FM (ঢাকা এফএম)', frequency: '90.4 FM', city: 'Dhaka', category: 'Music & Talk', stream_url: 'https://stream.dhakafm904.com/dhakafm', is_active: true, sort_order: 4 },
+  { id: 5, name: 'Shadhin FM (স্বাধীন এফএম)', frequency: '92.4 FM', city: 'Dhaka', category: 'Bangla Music', stream_url: 'https://stream.shadhin.fm/live', is_active: true, sort_order: 5 },
+  { id: 6, name: 'Jago FM (জাগো এফএম)', frequency: '94.4 FM', city: 'Dhaka', category: 'Youth & Hits', stream_url: 'https://streaming.jagofm.com/jagofm', is_active: true, sort_order: 6 },
+  { id: 7, name: 'Peoples Radio (পিপলস রেডিও)', frequency: '91.6 FM', city: 'Dhaka', category: 'Talk & Music', stream_url: 'https://stream.peoplesradio.fm/live', is_active: true, sort_order: 7 },
+  { id: 8, name: 'Radio Bhumi (রেডিও ভূমি)', frequency: '92.8 FM', city: 'Dhaka', category: 'Folk & News', stream_url: 'https://stream.radiobhumi.fm/live', is_active: true, sort_order: 8 }
+];
+let memoryCustomChannels = [
+  { id: 1, name: 'RadioLink Hit Studio', frequency_tag: 'CH-101.8 RL', category: 'Music & Show', description: 'রেডিওলিংক অফিসিয়াল মিউজিক ও লাইভ শো চ্যানেল', loop_queue: true, auto_ad_enabled: true, ad_announce_bn: 'আপনি শুনছেন রেডিওলিংক স্টুডিও। সাথেই থাকুন!', is_active: true, sort_order: 1 }
+];
+let memoryRadioPrograms = [];
+const memoryRadioMedia = new Map();
+let nextMemoryFmId = 9;
+let nextMemoryChannelId = 2;
+let nextMemoryProgramId = 1;
+let nextMemoryMediaId = 1;
+
+function getBdTimeHhMm() {
+  try {
+    const now = new Date(Date.now() + 6 * 3600 * 1000);
+    const hh = String(now.getUTCHours()).padStart(2, '0');
+    const mm = String(now.getUTCMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  } catch (_) {
+    return '12:00';
+  }
+}
 
 async function initDatabase() {
   if (!pool) {
@@ -210,6 +243,62 @@ async function initDatabase() {
       config_json JSONB NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS radiolink_fm_stations (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      frequency TEXT NOT NULL DEFAULT 'FM',
+      city TEXT NOT NULL DEFAULT 'Dhaka',
+      category TEXT NOT NULL DEFAULT 'Music',
+      stream_url TEXT NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order INTEGER NOT NULL DEFAULT 10,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS radiolink_custom_channels (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      frequency_tag TEXT NOT NULL DEFAULT 'RL-CH1',
+      category TEXT NOT NULL DEFAULT 'Music & Show',
+      description TEXT NOT NULL DEFAULT '',
+      loop_queue BOOLEAN NOT NULL DEFAULT TRUE,
+      auto_ad_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      ad_announce_bn TEXT NOT NULL DEFAULT 'আপনি শুনছেন রেডিওলিংক। সাথেই থাকুন!',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order INTEGER NOT NULL DEFAULT 10,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS radiolink_radio_media (
+      id SERIAL PRIMARY KEY,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'audio/mpeg',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      data_bytea BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS radiolink_radio_programs (
+      id SERIAL PRIMARY KEY,
+      channel_id INTEGER NOT NULL REFERENCES radiolink_custom_channels(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      item_type TEXT NOT NULL DEFAULT 'music',
+      category TEXT NOT NULL DEFAULT 'Music',
+      media_id INTEGER REFERENCES radiolink_radio_media(id) ON DELETE SET NULL,
+      media_url TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      schedule_mode TEXT NOT NULL DEFAULT 'serial',
+      start_time_hhmm TEXT NOT NULL DEFAULT '',
+      end_time_hhmm TEXT NOT NULL DEFAULT '',
+      duration_sec INTEGER NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_radiolink_programs_order
+      ON radiolink_radio_programs (channel_id ASC, sort_order ASC, id ASC);
   `);
 
   // Normalize existing staff callsigns and migrate non-tactical / duplicate user callsigns before enforcing unique index
@@ -268,7 +357,29 @@ async function initDatabase() {
       );
     }
   }
-  console.log('[DB] Neon PostgreSQL tables verified (users, reports, servers, roles, config).');
+
+  const fmCount = await pool.query('SELECT COUNT(*)::int AS cnt FROM radiolink_fm_stations');
+  if ((fmCount.rows[0]?.cnt || 0) === 0) {
+    for (const st of memoryFmStations) {
+      await pool.query(
+        `INSERT INTO radiolink_fm_stations (name, frequency, city, category, stream_url, is_active, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [st.name, st.frequency, st.city, st.category, st.stream_url, st.is_active, st.sort_order]
+      );
+    }
+  }
+
+  const chCount = await pool.query('SELECT COUNT(*)::int AS cnt FROM radiolink_custom_channels');
+  if ((chCount.rows[0]?.cnt || 0) === 0) {
+    for (const ch of memoryCustomChannels) {
+      await pool.query(
+        `INSERT INTO radiolink_custom_channels (name, frequency_tag, category, description, loop_queue, auto_ad_enabled, ad_announce_bn, is_active, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [ch.name, ch.frequency_tag, ch.category, ch.description, ch.loop_queue, ch.auto_ad_enabled, ch.ad_announce_bn, ch.is_active, ch.sort_order]
+      );
+    }
+  }
+  console.log('[DB] Neon PostgreSQL tables verified (users, reports, servers, roles, config, radio).');
 }
 
 async function getRoleForHardwareId(hardwareId) {
@@ -812,6 +923,421 @@ app.post('/api/report', async (req, res) => {
       reason: req.body?.reason
     });
     res.json({ ok: true, report_count: cnt });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ==================== RADIO & BD FM STUDIO ENDPOINTS ====================
+async function fetchRadioDirectoryData(includeInactive = false) {
+  let fmStations = [];
+  let channels = [];
+  let programs = [];
+  if (pool) {
+    const fmRes = await pool.query(
+      includeInactive
+        ? 'SELECT id, name, frequency, city, category, stream_url, is_active, sort_order FROM radiolink_fm_stations ORDER BY sort_order ASC, id ASC'
+        : 'SELECT id, name, frequency, city, category, stream_url, is_active, sort_order FROM radiolink_fm_stations WHERE is_active = TRUE ORDER BY sort_order ASC, id ASC'
+    );
+    fmStations = fmRes.rows;
+
+    const chRes = await pool.query(
+      includeInactive
+        ? 'SELECT id, name, frequency_tag, category, description, loop_queue, auto_ad_enabled, ad_announce_bn, is_active, sort_order FROM radiolink_custom_channels ORDER BY sort_order ASC, id ASC'
+        : 'SELECT id, name, frequency_tag, category, description, loop_queue, auto_ad_enabled, ad_announce_bn, is_active, sort_order FROM radiolink_custom_channels WHERE is_active = TRUE ORDER BY sort_order ASC, id ASC'
+    );
+    channels = chRes.rows;
+
+    const progRes = await pool.query(
+      includeInactive
+        ? 'SELECT id, channel_id, title, item_type, category, media_id, media_url, sort_order, schedule_mode, start_time_hhmm, end_time_hhmm, duration_sec, is_active FROM radiolink_radio_programs ORDER BY channel_id ASC, sort_order ASC, id ASC'
+        : 'SELECT id, channel_id, title, item_type, category, media_id, media_url, sort_order, schedule_mode, start_time_hhmm, end_time_hhmm, duration_sec, is_active FROM radiolink_radio_programs WHERE is_active = TRUE ORDER BY channel_id ASC, sort_order ASC, id ASC'
+    );
+    programs = progRes.rows;
+  } else {
+    fmStations = memoryFmStations
+      .filter((s) => includeInactive || s.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+    channels = memoryCustomChannels
+      .filter((c) => includeInactive || c.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+    programs = memoryRadioPrograms
+      .filter((p) => includeInactive || p.is_active)
+      .sort((a, b) => a.channel_id - b.channel_id || a.sort_order - b.sort_order || a.id - b.id);
+  }
+
+  const cfg = await getMergedAppConfig();
+  return {
+    ok: true,
+    db_ok: Boolean(pool),
+    server_time_bd_hhmm: getBdTimeHhMm(),
+    fm_stations: fmStations,
+    custom_channels: channels,
+    programs,
+    default_ad: {
+      url: String(cfg.radio_default_ad_url || ''),
+      announce_bn: String(cfg.radio_default_ad_text || 'আপনি শুনছেন রেডিওলিংক। বর্তমান অনুষ্ঠান শেষ হয়েছে, সাথেই থাকুন!')
+    }
+  };
+}
+
+app.get('/radio/directory', async (_req, res) => {
+  try {
+    const data = await fetchRadioDirectoryData(false);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/radio/media/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).send('Invalid media id');
+    let row = null;
+    if (pool) {
+      const q = await pool.query(
+        'SELECT filename, mime_type, data_bytea FROM radiolink_radio_media WHERE id = $1 LIMIT 1',
+        [id]
+      );
+      row = q.rows[0] || null;
+    } else {
+      row = memoryRadioMedia.get(id) || null;
+    }
+    if (!row || !row.data_bytea) return res.status(404).send('Audio not found');
+    const buf = Buffer.isBuffer(row.data_bytea) ? row.data_bytea : Buffer.from(row.data_bytea);
+    const total = buf.length;
+    const mime = String(row.mime_type || 'audio/mpeg');
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+
+    const range = req.headers.range;
+    if (range) {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
+      if (m) {
+        const start = m[1] ? Number(m[1]) : 0;
+        const end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+        if (start >= 0 && start <= end && end < total) {
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+          return res.end(buf.subarray(start, end + 1));
+        }
+      }
+    }
+    res.setHeader('Content-Length', String(total));
+    return res.end(buf);
+  } catch (err) {
+    return res.status(500).send(err.message);
+  }
+});
+
+// HTTPS stream proxy restricted exclusively to registered active FM stations (no open SSRF)
+app.get('/radio/fm-proxy/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).send('Invalid station id');
+    let streamUrl = '';
+    if (pool) {
+      const q = await pool.query('SELECT stream_url FROM radiolink_fm_stations WHERE id = $1 AND is_active = TRUE LIMIT 1', [id]);
+      streamUrl = q.rows[0]?.stream_url || '';
+    } else {
+      streamUrl = memoryFmStations.find((s) => s.id === id && s.is_active)?.stream_url || '';
+    }
+    if (!streamUrl) return res.status(404).send('Station not found');
+
+    const controller = new AbortController();
+    req.on('close', () => controller.abort());
+    const upstream = await fetch(streamUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'RadioLink-AudioRelay/2.1', 'Icy-MetaData': '0' }
+    });
+    if (!upstream.ok || !upstream.body) {
+      return res.status(502).send('FM upstream offline');
+    }
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    const reader = upstream.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (res.writableEnded) break;
+      res.write(Buffer.from(value));
+    }
+    return res.end();
+  } catch (_) {
+    if (!res.headersSent) return res.status(502).send('FM stream unreachable');
+    return res.end();
+  }
+});
+
+app.get('/admin/radio/overview', requireAnyStaffAuth, async (_req, res) => {
+  try {
+    const data = await fetchRadioDirectoryData(true);
+    let mediaFiles = [];
+    if (pool) {
+      const mRes = await pool.query(
+        'SELECT id, filename, mime_type, size_bytes, EXTRACT(EPOCH FROM created_at) * 1000 AS created_ms FROM radiolink_radio_media ORDER BY id DESC LIMIT 100'
+      );
+      mediaFiles = mRes.rows;
+    } else {
+      mediaFiles = Array.from(memoryRadioMedia.values()).map((m) => ({
+        id: m.id, filename: m.filename, mime_type: m.mime_type, size_bytes: m.size_bytes, created_ms: m.created_ms
+      }));
+    }
+    res.json({ ...data, media_files: mediaFiles });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/admin/radio/fm', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.body?.id || 0);
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    const frequency = String(req.body?.frequency || 'FM').trim().slice(0, 24);
+    const city = String(req.body?.city || 'Dhaka').trim().slice(0, 40);
+    const category = String(req.body?.category || 'Music').trim().slice(0, 40);
+    const streamUrl = String(req.body?.stream_url || '').trim();
+    const isActive = req.body?.is_active !== false;
+    const sortOrder = Number.isFinite(Number(req.body?.sort_order)) ? Number(req.body.sort_order) : 10;
+    if (!name || !/^https?:\/\//i.test(streamUrl)) {
+      return res.status(400).json({ ok: false, error: 'Valid station name and http/https stream_url required' });
+    }
+    let savedId = id;
+    if (pool) {
+      if (id > 0) {
+        await pool.query(
+          `UPDATE radiolink_fm_stations SET name=$2, frequency=$3, city=$4, category=$5, stream_url=$6, is_active=$7, sort_order=$8, updated_at=NOW() WHERE id=$1`,
+          [id, name, frequency, city, category, streamUrl, isActive, sortOrder]
+        );
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO radiolink_fm_stations (name, frequency, city, category, stream_url, is_active, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+          [name, frequency, city, category, streamUrl, isActive, sortOrder]
+        );
+        savedId = ins.rows[0].id;
+      }
+    } else {
+      const idx = memoryFmStations.findIndex((s) => s.id === id);
+      const item = { id: idx >= 0 ? id : nextMemoryFmId++, name, frequency, city, category, stream_url: streamUrl, is_active: isActive, sort_order: sortOrder };
+      if (idx >= 0) memoryFmStations[idx] = item; else memoryFmStations.push(item);
+      savedId = item.id;
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true, id: savedId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/admin/radio/fm', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.query.id || req.body?.id || 0);
+    if (id <= 0) return res.status(400).json({ ok: false, error: 'id required' });
+    if (pool) {
+      await pool.query('DELETE FROM radiolink_fm_stations WHERE id = $1', [id]);
+    } else {
+      memoryFmStations = memoryFmStations.filter((s) => s.id !== id);
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/admin/radio/channel', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.body?.id || 0);
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    const frequencyTag = String(req.body?.frequency_tag || 'RL-CH').trim().slice(0, 24);
+    const category = String(req.body?.category || 'Music & Show').trim().slice(0, 40);
+    const description = String(req.body?.description || '').trim().slice(0, 180);
+    const loopQueue = req.body?.loop_queue !== false;
+    const autoAdEnabled = req.body?.auto_ad_enabled !== false;
+    const adAnnounceBn = String(req.body?.ad_announce_bn || 'আপনি শুনছেন রেডিওলিংক। সাথেই থাকুন!').trim().slice(0, 220);
+    const isActive = req.body?.is_active !== false;
+    const sortOrder = Number.isFinite(Number(req.body?.sort_order)) ? Number(req.body.sort_order) : 10;
+    if (!name) return res.status(400).json({ ok: false, error: 'Channel name required' });
+
+    let savedId = id;
+    if (pool) {
+      if (id > 0) {
+        await pool.query(
+          `UPDATE radiolink_custom_channels SET name=$2, frequency_tag=$3, category=$4, description=$5, loop_queue=$6, auto_ad_enabled=$7, ad_announce_bn=$8, is_active=$9, sort_order=$10, updated_at=NOW() WHERE id=$1`,
+          [id, name, frequencyTag, category, description, loopQueue, autoAdEnabled, adAnnounceBn, isActive, sortOrder]
+        );
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO radiolink_custom_channels (name, frequency_tag, category, description, loop_queue, auto_ad_enabled, ad_announce_bn, is_active, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+          [name, frequencyTag, category, description, loopQueue, autoAdEnabled, adAnnounceBn, isActive, sortOrder]
+        );
+        savedId = ins.rows[0].id;
+      }
+    } else {
+      const idx = memoryCustomChannels.findIndex((c) => c.id === id);
+      const item = { id: idx >= 0 ? id : nextMemoryChannelId++, name, frequency_tag: frequencyTag, category, description, loop_queue: loopQueue, auto_ad_enabled: autoAdEnabled, ad_announce_bn: adAnnounceBn, is_active: isActive, sort_order: sortOrder };
+      if (idx >= 0) memoryCustomChannels[idx] = item; else memoryCustomChannels.push(item);
+      savedId = item.id;
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true, id: savedId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/admin/radio/channel', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.query.id || req.body?.id || 0);
+    if (id <= 0) return res.status(400).json({ ok: false, error: 'id required' });
+    if (pool) {
+      await pool.query('DELETE FROM radiolink_custom_channels WHERE id = $1', [id]);
+    } else {
+      memoryCustomChannels = memoryCustomChannels.filter((c) => c.id !== id);
+      memoryRadioPrograms = memoryRadioPrograms.filter((p) => p.channel_id !== id);
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post(
+  '/admin/radio/upload',
+  express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '16mb' }),
+  requireAdminOnlyAuth,
+  async (req, res) => {
+    try {
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (buf.length === 0) {
+        return res.status(400).json({ ok: false, error: 'Empty audio payload' });
+      }
+      if (buf.length > 15 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: 'Audio file must be <= 15 MB for database hosting (use HTTPS URL for larger files)' });
+      }
+      const filename = String(req.headers['x-filename'] || req.query.filename || 'track.mp3').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+      const mimeType = String(req.headers['content-type'] || 'audio/mpeg').split(';')[0].trim() || 'audio/mpeg';
+      let mediaId = 0;
+      if (pool) {
+        const ins = await pool.query(
+          `INSERT INTO radiolink_radio_media (filename, mime_type, size_bytes, data_bytea) VALUES ($1, $2, $3, $4) RETURNING id`,
+          [filename, mimeType, buf.length, buf]
+        );
+        mediaId = ins.rows[0].id;
+      } else {
+        mediaId = nextMemoryMediaId++;
+        memoryRadioMedia.set(mediaId, { id: mediaId, filename, mime_type: mimeType, size_bytes: buf.length, data_bytea: buf, created_ms: Date.now() });
+      }
+      const mediaUrl = `/radio/media/${mediaId}`;
+      res.json({ ok: true, media_id: mediaId, media_url: mediaUrl, filename, mime_type: mimeType, size_bytes: buf.length });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+);
+
+app.post('/admin/radio/program', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.body?.id || 0);
+    const channelId = Number(req.body?.channel_id || 0);
+    const title = String(req.body?.title || '').trim().slice(0, 100);
+    const itemTypeRaw = String(req.body?.item_type || 'music').toLowerCase();
+    const itemType = (itemTypeRaw === 'show' || itemTypeRaw === 'ad') ? itemTypeRaw : 'music';
+    const category = String(req.body?.category || (itemType === 'ad' ? 'Promo Ad' : 'Music')).trim().slice(0, 40);
+    const mediaId = Number(req.body?.media_id || 0) > 0 ? Number(req.body.media_id) : null;
+    const mediaUrl = String(req.body?.media_url || '').trim();
+    const scheduleMode = String(req.body?.schedule_mode || 'serial').toLowerCase() === 'timed' ? 'timed' : 'serial';
+    const startTime = String(req.body?.start_time_hhmm || '').trim().slice(0, 5);
+    const endTime = String(req.body?.end_time_hhmm || '').trim().slice(0, 5);
+    const durationSec = Math.max(0, Number(req.body?.duration_sec || 0) || 0);
+    const sortOrder = Number.isFinite(Number(req.body?.sort_order)) ? Number(req.body.sort_order) : 10;
+    const isActive = req.body?.is_active !== false;
+
+    if (channelId <= 0 || !title || !mediaUrl) {
+      return res.status(400).json({ ok: false, error: 'channel_id, title, and media_url are required' });
+    }
+    let savedId = id;
+    if (pool) {
+      if (id > 0) {
+        await pool.query(
+          `UPDATE radiolink_radio_programs SET title=$2, item_type=$3, category=$4, media_id=$5, media_url=$6, sort_order=$7, schedule_mode=$8, start_time_hhmm=$9, end_time_hhmm=$10, duration_sec=$11, is_active=$12 WHERE id=$1`,
+          [id, title, itemType, category, mediaId, mediaUrl, sortOrder, scheduleMode, startTime, endTime, durationSec, isActive]
+        );
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO radiolink_radio_programs (channel_id, title, item_type, category, media_id, media_url, sort_order, schedule_mode, start_time_hhmm, end_time_hhmm, duration_sec, is_active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+          [channelId, title, itemType, category, mediaId, mediaUrl, sortOrder, scheduleMode, startTime, endTime, durationSec, isActive]
+        );
+        savedId = ins.rows[0].id;
+      }
+    } else {
+      const idx = memoryRadioPrograms.findIndex((p) => p.id === id);
+      const item = { id: idx >= 0 ? id : nextMemoryProgramId++, channel_id: channelId, title, item_type: itemType, category, media_id: mediaId, media_url: mediaUrl, sort_order: sortOrder, schedule_mode: scheduleMode, start_time_hhmm: startTime, end_time_hhmm: endTime, duration_sec: durationSec, is_active: isActive };
+      if (idx >= 0) memoryRadioPrograms[idx] = item; else memoryRadioPrograms.push(item);
+      savedId = item.id;
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true, id: savedId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/admin/radio/program/reorder', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const channelId = Number(req.body?.channel_id || 0);
+    const orderedIds = Array.isArray(req.body?.ordered_ids) ? req.body.ordered_ids.map(Number).filter((x) => x > 0) : [];
+    if (channelId <= 0 || orderedIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'channel_id and ordered_ids required' });
+    }
+    if (pool) {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await pool.query('UPDATE radiolink_radio_programs SET sort_order = $1 WHERE id = $2 AND channel_id = $3', [i + 1, orderedIds[i], channelId]);
+      }
+    } else {
+      orderedIds.forEach((pid, idx) => {
+        const p = memoryRadioPrograms.find((x) => x.id === pid && x.channel_id === channelId);
+        if (p) p.sort_order = idx + 1;
+      });
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/admin/radio/program', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const id = Number(req.query.id || req.body?.id || 0);
+    if (id <= 0) return res.status(400).json({ ok: false, error: 'id required' });
+    if (pool) {
+      await pool.query('DELETE FROM radiolink_radio_programs WHERE id = $1', [id]);
+    } else {
+      memoryRadioPrograms = memoryRadioPrograms.filter((p) => p.id !== id);
+    }
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/admin/radio/default-ad', requireAdminOnlyAuth, async (req, res) => {
+  try {
+    const adUrl = String(req.body?.url || '').trim();
+    const announceBn = String(req.body?.announce_bn || memoryConfig.radio_default_ad_text).trim().slice(0, 240);
+    await saveConfigAndBroadcast({
+      radio_default_ad_url: adUrl,
+      radio_default_ad_text: announceBn
+    });
+    broadcastTextToAllUsers({ type: 'radio_directory_updated' });
+    res.json({ ok: true, radio_default_ad_url: adUrl, radio_default_ad_text: announceBn });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
